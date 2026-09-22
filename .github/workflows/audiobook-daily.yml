@@ -3,6 +3,7 @@ name: Audiobook Channel Daily
 on:
   schedule:
     - cron: '0 8 * * *'
+
   workflow_dispatch:
     inputs:
       test:
@@ -19,9 +20,72 @@ jobs:
   produce:
     runs-on: ubuntu-latest
     timeout-minutes: 360
-    permissions: {contents: read}
+
+    permissions:
+      contents: read
+
     steps:
-      - uses: actions/checkout@v5
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Show repository information
+        run: |
+          echo "========================================"
+          echo "REPOSITORY INFORMATION"
+          echo "========================================"
+
+          echo "Working directory:"
+          pwd
+
+          echo "GitHub workspace:"
+          echo "$GITHUB_WORKSPACE"
+
+          echo "Commit:"
+          git rev-parse HEAD
+
+          echo "Branch:"
+          git branch --show-current
+
+          echo "Repository root:"
+          git rev-parse --show-toplevel
+
+      - name: Show audiobook assets
+        run: |
+          echo "========================================"
+          echo "AUDIOBOOK ASSETS"
+          echo "========================================"
+
+          echo "--- assets ---"
+          if [ -d "assets" ]; then
+            ls -la assets
+          else
+            echo "ERROR: assets directory does not exist."
+          fi
+
+          echo "--- assets/audiobook ---"
+          if [ -d "assets/audiobook" ]; then
+            ls -la assets/audiobook
+          else
+            echo "ERROR: assets/audiobook directory does not exist."
+          fi
+
+          echo "--- assets/audiobook/books ---"
+          if [ -d "assets/audiobook/books" ]; then
+            ls -la "assets/audiobook/books"
+          else
+            echo "ERROR: assets/audiobook/books directory does not exist."
+          fi
+
+          echo "--- complete books tree ---"
+          if [ -d "assets/audiobook/books" ]; then
+            find "assets/audiobook/books" -maxdepth 5 -print
+          fi
+
+          echo "--- Git tracked audiobook files ---"
+          git ls-files 'assets/audiobook/*' || true
+
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
@@ -29,43 +93,119 @@ jobs:
           cache-dependency-path: |
             requirements.txt
             requirements-torch.txt
+
       - name: System dependencies
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg espeak-ng
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg espeak-ng
+
       - name: Cache TTS model weights
         uses: actions/cache@v4
         with:
           path: ~/.cache/huggingface
           key: kokoro-${{ runner.os }}-production-v2
+
       - name: Python dependencies
         run: |
+          python -m pip install --upgrade pip
           pip install -r requirements-torch.txt
           pip install -r requirements.txt
+
       - name: Validate source
         run: |
           python -m compileall -q src scripts
           python -m pytest -q -m "not e2e"
+
       - name: Preflight assets
         run: |
-          test -d assets/audiobook/books
-          test -d assets/audiobook/persons
-          test -d assets/audiobook/backgrounds
-          test -d assets/audiobook/music
-          test -d assets/audiobook/thumbnails
-          find assets/audiobook/books -mindepth 2 -maxdepth 2 -type d | head -1 >/dev/null || { echo 'No topic folders found under assets/audiobook/books/<BOOK>/<TOPIC>/'; exit 1; }
+          set -e
+
+          echo "========================================"
+          echo "PREFLIGHT ASSET CHECK"
+          echo "========================================"
+
+          # Required base directories
+          required_dirs=(
+            "assets/audiobook/books"
+            "assets/audiobook/persons"
+            "assets/audiobook/backgrounds"
+            "assets/audiobook/music"
+            "assets/audiobook/thumbnails"
+          )
+
+          for dir in "${required_dirs[@]}"; do
+            if [ ! -d "$dir" ]; then
+              echo "ERROR: Required directory is missing:"
+              echo "  $dir"
+              echo
+              echo "Current assets tree:"
+              find assets -maxdepth 5 -print 2>/dev/null || true
+              exit 1
+            fi
+
+            echo "OK: $dir"
+          done
+
+          echo
+          echo "Checking audiobook book/topic folders..."
+
+          topic_found=false
+
+          while IFS= read -r topic_dir; do
+            if [ -n "$topic_dir" ]; then
+              echo "Found topic:"
+              echo "  $topic_dir"
+              topic_found=true
+            fi
+          done < <(
+            find "assets/audiobook/books" \
+              -mindepth 2 \
+              -maxdepth 2 \
+              -type d \
+              -print
+          )
+
+          if [ "$topic_found" != "true" ]; then
+            echo
+            echo "ERROR: No topic folders found."
+            echo
+            echo "Expected structure:"
+            echo "assets/audiobook/books/<BOOK>/<TOPIC>/"
+            echo
+            echo "Actual books tree:"
+            find "assets/audiobook/books" -maxdepth 5 -print
+            exit 1
+          fi
+
+          echo
+          echo "========================================"
+          echo "PREFLIGHT PASSED"
+          echo "========================================"
+
       - name: Produce audiobook
         env:
           PYTHONPATH: ${{ github.workspace }}
+
           DRIVE_REQUIRE_PERSISTENCE: 'true'
+
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+
           AUDIOBOOK_DRIVE_CREDENTIALS: ${{ secrets.AUDIOBOOK_DRIVE_CREDENTIALS }}
           AUDIOBOOK_DRIVE_ROOT_FOLDER_ID: ${{ secrets.AUDIOBOOK_DRIVE_ROOT_FOLDER_ID }}
+
           YOUTUBE_TOKEN_JSON_BOOKS: ${{ secrets.YOUTUBE_TOKEN_JSON_BOOKS }}
+
           YOUTUBE_VISIBILITY_BOOKS: ${{ inputs.test && 'private' || vars.YOUTUBE_VISIBILITY_BOOKS || 'private' }}
+
           AUDIOBOOK_TARGET_MINUTES: ${{ vars.AUDIOBOOK_TARGET_MINUTES || '60' }}
+
           AUDIOBOOK_TTS_PROFILE: ${{ vars.AUDIOBOOK_TTS_PROFILE || 'production' }}
-        run: python scripts/pipeline.py --channel audiobook ${{ inputs.test && '--test' || '' }}
+
+        run: |
+          python scripts/pipeline.py --channel audiobook ${{ inputs.test && '--test' || '' }}
+
       - name: Upload diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@v4
