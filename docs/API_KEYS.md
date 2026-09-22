@@ -1,0 +1,15 @@
+# Secrets
+
+GitHub Actions secrets:
+
+- `GEMINI_API_KEY` or `GROQ_API_KEY`
+- `TAVILY_API_KEY`
+- `AUDIOBOOK_DRIVE_CREDENTIALS`
+- `AUDIOBOOK_DRIVE_ROOT_FOLDER_ID`
+- `YOUTUBE_TOKEN_JSON_BOOKS`
+
+Optional repository variable:
+
+- `YOUTUBE_VISIBILITY_BOOKS`
+- `AUDIOBOOK_TARGET_MINUTES` (default 60)
+- `AUDIOBOOK_TTS_PROFILE` (default production)

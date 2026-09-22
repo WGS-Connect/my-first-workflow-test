@@ -1,0 +1,7 @@
+# ONE-TIME narrator selection. Edit after using scripts/voice_lab.py.
+VOICE_A=am_adam
+VOICE_B=af_heart
+BLEND=0
+SPEED=0.94
+PITCH=0
+# BLEND=0 means Voice A only. 50 means equal A/B mix. 100 means Voice B only.

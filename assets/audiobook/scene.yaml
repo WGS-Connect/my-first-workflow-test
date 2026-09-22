@@ -1,0 +1,8 @@
+person_box: [40, 90, 720, 820]
+book_quad:
+  - [760, 145]
+  - [1185, 112]
+  - [1185, 930]
+  - [760, 958]
+book_side_depth: 24
+book_shadow: true

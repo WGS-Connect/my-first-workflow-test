@@ -1,0 +1,12 @@
+base_size: [1280, 720]
+# Fixed coordinates are examples for a 1280x720 template. Adjust once per template
+# family, never per generated video.
+default:
+  book_box: [40, 80, 430, 650]
+  person_box: [0, 70, 390, 720]
+  text_box: [470, 55, 1240, 665]
+  font_size: 82
+  line_spacing: 6
+  stroke_width: 3
+  fill: "#FFFFFF"
+  stroke_fill: "#000000"

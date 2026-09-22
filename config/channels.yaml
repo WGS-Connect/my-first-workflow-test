@@ -1,0 +1,52 @@
+# Single-channel audiobook automation. Secrets are supplied through GitHub Actions.
+runtime:
+  work_root: work
+
+drive:
+  require_persistence: false
+  require_narrow_scope: false
+
+llm:
+  gemini_models: [gemini-3.5-flash, gemini-3.5-flash-lite, gemini-3.1-flash-lite]
+  groq_models: [openai/gpt-oss-120b, openai/gpt-oss-20b]
+  request_timeout: 180
+  max_retries: 2
+  retry_base_seconds: 2.0
+
+youtube:
+  category_id: "27"
+  thumbnail_required: false
+
+render:
+  width: 1920
+  height: 1080
+  fps: 30
+  crf: 20
+  preset: veryfast
+  chunk_workers: 2
+
+audiobook:
+  books_root: assets/audiobook/books
+  asset_root: assets/audiobook
+  target_minutes: 60
+  test_minutes: 3
+  wpm: 130
+  tts_profile: production
+  persons_dir: persons
+  backgrounds_dir: backgrounds
+  music_dir: music
+  thumbnail_templates_dir: thumbnails
+  thumbnail_layout_file: thumbnail_layout.yaml
+  scene_layout_file: scene.yaml
+  music_volume: 0.06
+  strict_assets: true
+  allow_unknown_rights: false
+  max_attempts: 3
+  stale_hours: 6
+  background_order: rotate_all
+  thumbnail_min_words: 3
+  thumbnail_max_words: 6
+  budgets:
+    gemini_calls: 300
+    drive_upload_mb: 6000
+    youtube_units: 9000
