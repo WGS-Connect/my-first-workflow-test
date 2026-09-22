@@ -1,0 +1,60 @@
+name: Retry Failed Audiobook Job
+on:
+  workflow_dispatch:
+    inputs:
+      requeue_failed:
+        description: 'Return parked topics to the queue before running'
+        required: false
+        default: false
+        type: boolean
+concurrency:
+  group: audiobook-channel
+  cancel-in-progress: false
+jobs:
+  retry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    permissions: {contents: read}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with: {python-version: '3.12', cache: pip}
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg espeak-ng
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: kokoro-${{ runner.os }}-production-v2
+      - run: |
+          pip install -r requirements-torch.txt
+          pip install -r requirements.txt
+      - run: python -m compileall -q src scripts && python -m pytest -q -m "not e2e"
+      - name: Requeue parked topics
+        if: inputs.requeue_failed
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/requeue_topics.py
+      - name: Resume audiobook
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          DRIVE_REQUIRE_PERSISTENCE: 'true'
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+          AUDIOBOOK_DRIVE_CREDENTIALS: ${{ secrets.AUDIOBOOK_DRIVE_CREDENTIALS }}
+          AUDIOBOOK_DRIVE_ROOT_FOLDER_ID: ${{ secrets.AUDIOBOOK_DRIVE_ROOT_FOLDER_ID }}
+          YOUTUBE_TOKEN_JSON_BOOKS: ${{ secrets.YOUTUBE_TOKEN_JSON_BOOKS }}
+          YOUTUBE_VISIBILITY_BOOKS: ${{ vars.YOUTUBE_VISIBILITY_BOOKS || 'private' }}
+          AUDIOBOOK_TARGET_MINUTES: ${{ vars.AUDIOBOOK_TARGET_MINUTES || '60' }}
+          AUDIOBOOK_TTS_PROFILE: ${{ vars.AUDIOBOOK_TTS_PROFILE || 'production' }}
+        run: python scripts/pipeline.py --channel audiobook
+      - name: Upload diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audiobook-retry-job-state
+          path: |
+            work/jobs/*/state.json
+            work/jobs/*/qa.json
+            work/jobs/*/budget.json
+          if-no-files-found: ignore
+          retention-days: 7
