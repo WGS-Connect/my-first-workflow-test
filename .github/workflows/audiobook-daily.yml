@@ -25,68 +25,54 @@ jobs:
       contents: read
 
     steps:
+      # ---------------------------------------------------------
+      # CHECKOUT
+      # ---------------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      - name: Show repository information
+      # ---------------------------------------------------------
+      # REPOSITORY DIAGNOSTICS
+      # ---------------------------------------------------------
+      - name: Verify repository and assets
+        shell: bash
         run: |
+          set -e
+
           echo "========================================"
-          echo "REPOSITORY INFORMATION"
+          echo "REPOSITORY CHECK"
           echo "========================================"
 
           echo "Working directory:"
           pwd
 
+          echo
           echo "GitHub workspace:"
           echo "$GITHUB_WORKSPACE"
 
-          echo "Commit:"
+          echo
+          echo "Current commit:"
           git rev-parse HEAD
 
-          echo "Branch:"
-          git branch --show-current
+          echo
+          echo "Repository root:"
+          git rev-parse --show-toplevel
 
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-          cache: pip
-          cache-dependency-path: |
-            requirements.txt
-            requirements-torch.txt
-
-      - name: System dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg espeak-ng
-
-      - name: Cache TTS model weights
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/huggingface
-          key: kokoro-${{ runner.os }}-production-v2
-
-      - name: Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements-torch.txt
-          pip install -r requirements.txt
-
-      - name: Validate source
-        run: |
-          python -m compileall -q src scripts
-          python -m pytest -q -m "not e2e"
-
-      - name: Preflight assets
-        run: |
-          set -e
-
+          echo
           echo "========================================"
-          echo "PREFLIGHT ASSET CHECK"
+          echo "ASSET TREE"
           echo "========================================"
 
-          # Actual repository asset locations
+          find assets -maxdepth 6 -print
+
+          echo
+          echo "========================================"
+          echo "REQUIRED DIRECTORIES"
+          echo "========================================"
+
+          # These paths match the actual repository structure.
           required_dirs=(
             "assets/audiobook/books"
             "assets/persons"
@@ -96,10 +82,11 @@ jobs:
 
           for dir in "${required_dirs[@]}"; do
             if [ ! -d "$dir" ]; then
+              echo
               echo "ERROR: Required directory is missing:"
               echo "  $dir"
               echo
-              echo "Current assets tree:"
+              echo "The repository contains:"
               find assets -maxdepth 6 -print 2>/dev/null || true
               exit 1
             fi
@@ -108,41 +95,155 @@ jobs:
           done
 
           echo
-          echo "Checking audiobook book/topic folders..."
+          echo "========================================"
+          echo "AUDIOBOOK BOOK/TOPIC CHECK"
+          echo "========================================"
 
-          topic_found=false
+          topic_count=$(find "assets/audiobook/books" \
+            -mindepth 2 \
+            -maxdepth 2 \
+            -type d \
+            | wc -l)
 
-          while IFS= read -r topic_dir; do
-            if [ -n "$topic_dir" ]; then
-              echo "Found topic:"
-              echo "  $topic_dir"
-              topic_found=true
-            fi
-          done < <(
-            find "assets/audiobook/books" \
-              -mindepth 2 \
-              -maxdepth 2 \
-              -type d \
-              -print
-          )
+          echo "Topic folders found: $topic_count"
 
-          if [ "$topic_found" != "true" ]; then
+          if [ "$topic_count" -eq 0 ]; then
             echo
             echo "ERROR: No topic folders found."
             echo
-            echo "Expected structure:"
+            echo "Expected:"
             echo "assets/audiobook/books/<BOOK>/<TOPIC>/"
             echo
-            echo "Actual books tree:"
+            echo "Found:"
             find "assets/audiobook/books" -maxdepth 5 -print
             exit 1
           fi
 
           echo
+          echo "Topic folders:"
+
+          find "assets/audiobook/books" \
+            -mindepth 2 \
+            -maxdepth 2 \
+            -type d \
+            -print
+
+          echo
           echo "========================================"
-          echo "PREFLIGHT PASSED"
+          echo "BOOK FILES"
           echo "========================================"
 
+          find "assets/audiobook/books" \
+            -type f \
+            -print
+
+          echo
+          echo "========================================"
+          echo "ASSET PREFLIGHT PASSED"
+          echo "========================================"
+
+      # ---------------------------------------------------------
+      # PYTHON
+      # ---------------------------------------------------------
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-torch.txt
+
+      # ---------------------------------------------------------
+      # SYSTEM DEPENDENCIES
+      # ---------------------------------------------------------
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg espeak-ng
+
+          echo "FFmpeg:"
+          ffmpeg -version | head -1
+
+          echo "eSpeak:"
+          espeak-ng --version
+
+      # ---------------------------------------------------------
+      # CACHE TTS MODEL
+      # ---------------------------------------------------------
+      - name: Cache TTS model weights
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: kokoro-${{ runner.os }}-production-v2
+
+      # ---------------------------------------------------------
+      # PYTHON DEPENDENCIES
+      # ---------------------------------------------------------
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-torch.txt
+          pip install -r requirements.txt
+
+      # ---------------------------------------------------------
+      # SOURCE VALIDATION
+      # ---------------------------------------------------------
+      - name: Validate source
+        run: |
+          python -m compileall -q src scripts
+          python -m pytest -q -m "not e2e"
+
+      # ---------------------------------------------------------
+      # FINAL PREFLIGHT
+      # ---------------------------------------------------------
+      - name: Preflight assets
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "FINAL PREFLIGHT ASSET CHECK"
+          echo "========================================"
+
+          # Actual repository locations
+          test -d "assets/audiobook/books"
+          test -d "assets/persons"
+          test -d "assets/backgrounds"
+          test -d "assets/thumbnails"
+
+          echo "OK: assets/audiobook/books"
+          echo "OK: assets/persons"
+          echo "OK: assets/backgrounds"
+          echo "OK: assets/thumbnails"
+
+          # Require at least one:
+          # assets/audiobook/books/<BOOK>/<TOPIC>/
+          topic_dir="$(find "assets/audiobook/books" \
+            -mindepth 2 \
+            -maxdepth 2 \
+            -type d \
+            | head -1)"
+
+          if [ -z "$topic_dir" ]; then
+            echo
+            echo "ERROR: No topic folders found under:"
+            echo "assets/audiobook/books/<BOOK>/<TOPIC>/"
+            exit 1
+          fi
+
+          echo
+          echo "First topic found:"
+          echo "$topic_dir"
+
+          echo
+          echo "========================================"
+          echo "FINAL PREFLIGHT PASSED"
+          echo "========================================"
+
+      # ---------------------------------------------------------
+      # PRODUCE AUDIOBOOK
+      # ---------------------------------------------------------
       - name: Produce audiobook
         env:
           PYTHONPATH: ${{ github.workspace }}
@@ -167,6 +268,9 @@ jobs:
         run: |
           python scripts/pipeline.py --channel audiobook ${{ inputs.test && '--test' || '' }}
 
+      # ---------------------------------------------------------
+      # FAILURE DIAGNOSTICS
+      # ---------------------------------------------------------
       - name: Upload diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@v4
