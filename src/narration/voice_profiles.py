@@ -14,6 +14,7 @@ class VoiceProfile:
 
 PROFILES = {
     "audiobook": VoiceProfile("am_adam", 0.94, "Deep, steady American-English narrator"),
+    "production": VoiceProfile("am_adam", 0.94, "Deep, steady American-English narrator for audiobook production"),
     "relaxation": VoiceProfile("am_michael", 0.88, "Warm, calm American-English narrator"),
     "motivation": VoiceProfile("am_adam", 1.02, "Strong, confident American-English narrator"),
     "horror": VoiceProfile("am_fenrir", 0.91, "Deep, dark, controlled American-English narrator"),
