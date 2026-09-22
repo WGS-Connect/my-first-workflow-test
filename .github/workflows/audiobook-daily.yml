@@ -48,44 +48,6 @@ jobs:
           echo "Branch:"
           git branch --show-current
 
-          echo "Repository root:"
-          git rev-parse --show-toplevel
-
-      - name: Show audiobook assets
-        run: |
-          echo "========================================"
-          echo "AUDIOBOOK ASSETS"
-          echo "========================================"
-
-          echo "--- assets ---"
-          if [ -d "assets" ]; then
-            ls -la assets
-          else
-            echo "ERROR: assets directory does not exist."
-          fi
-
-          echo "--- assets/audiobook ---"
-          if [ -d "assets/audiobook" ]; then
-            ls -la assets/audiobook
-          else
-            echo "ERROR: assets/audiobook directory does not exist."
-          fi
-
-          echo "--- assets/audiobook/books ---"
-          if [ -d "assets/audiobook/books" ]; then
-            ls -la "assets/audiobook/books"
-          else
-            echo "ERROR: assets/audiobook/books directory does not exist."
-          fi
-
-          echo "--- complete books tree ---"
-          if [ -d "assets/audiobook/books" ]; then
-            find "assets/audiobook/books" -maxdepth 5 -print
-          fi
-
-          echo "--- Git tracked audiobook files ---"
-          git ls-files 'assets/audiobook/*' || true
-
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
@@ -124,13 +86,12 @@ jobs:
           echo "PREFLIGHT ASSET CHECK"
           echo "========================================"
 
-          # Required base directories
+          # Actual repository asset locations
           required_dirs=(
             "assets/audiobook/books"
-            "assets/audiobook/persons"
-            "assets/audiobook/backgrounds"
-            "assets/audiobook/music"
-            "assets/audiobook/thumbnails"
+            "assets/persons"
+            "assets/backgrounds"
+            "assets/thumbnails"
           )
 
           for dir in "${required_dirs[@]}"; do
@@ -139,7 +100,7 @@ jobs:
               echo "  $dir"
               echo
               echo "Current assets tree:"
-              find assets -maxdepth 5 -print 2>/dev/null || true
+              find assets -maxdepth 6 -print 2>/dev/null || true
               exit 1
             fi
 
