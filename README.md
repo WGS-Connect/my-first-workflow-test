@@ -37,22 +37,34 @@ If metadata is missing, AI generates only the missing part. A provided `title.tx
 
 ## Fixed video scene assets
 
+The current pipeline expects all scene assets under the audiobook asset root, not at the top-level `assets/` folder. This matches the runtime config in `src/config.py` and the GitHub Actions preflight checks.
+
 ```text
-assets/audiobook/
-├── persons/                 # transparent person images
-├── backgrounds/             # premade moving forest/bench videos
-├── music/                   # background music
-├── thumbnails/              # finished category templates
-├── scene.yaml
-├── thumbnail_layout.yaml
-└── voice_settings.txt
+assets/
+├── audiobook/
+│   ├── books/                  # topic folders and source material
+│   ├── persons/                # transparent person images
+│   ├── backgrounds/            # premade moving background videos
+│   ├── music/                  # background music
+│   ├── thumbnails/            # finished category templates
+│   ├── scene.yaml
+│   ├── thumbnail_layout.yaml
+│   └── voice_settings.txt
+├── thumbnails/                 # legacy/top-level folder; not used by current config
+└── ...
 ```
+
+Important:
+- `assets/audiobook/persons` is required by the runtime.
+- `assets/audiobook/backgrounds` is required by the runtime.
+- `assets/audiobook/books` is required and must contain a book/topic structure such as `assets/audiobook/books/<BOOK>/<TOPIC>/`.
+- Top-level `assets/persons`, `assets/backgrounds`, and `assets/music` are not the active runtime layout for this repository.
 
 The bench is **not generated**. It remains part of the premade background scene. The person is composited above the bench, and the book is composited onto the bench at fixed coordinates. Only the background video moves.
 
 ## Thumbnail system
 
-You provide finished category backgrounds/templates. The engine does not redesign them. It selects a category template, places the current book cover and the same selected person in fixed areas, and generates a **3–6 word short, curiosity/pain-driven hook** that is not a copy of the title.
+You provide finished category backgrounds/templates. The engine does not redesign them. It selects a category template, places the current book cover and the same selected person in fixed areas, and generates a **3–8 word short, curiosity/pain-driven hook** that is not a copy of the title.
 
 Common raster image formats are accepted for covers/templates: JPEG, PNG, WebP, BMP, TIFF and AVIF when Pillow supports it.
 
@@ -85,6 +97,8 @@ Credentials remain `YOUTUBE_TOKEN_JSON_BOOKS` and `YOUTUBE_VISIBILITY_BOOKS`.
 ## GitHub Actions
 
 Only audiobook workflows remain. Required secrets are `GEMINI_API_KEY` or `GROQ_API_KEY`, `TAVILY_API_KEY` (recommended), `AUDIOBOOK_DRIVE_CREDENTIALS`, `AUDIOBOOK_DRIVE_ROOT_FOLDER_ID`, and `YOUTUBE_TOKEN_JSON_BOOKS`.
+
+The workflow also validates the asset layout before production. If the asset directory structure is missing or incorrect, the job fails early with a clear preflight error instead of continuing into rendering.
 
 ## Local validation
 
