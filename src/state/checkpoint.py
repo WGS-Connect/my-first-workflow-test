@@ -38,6 +38,10 @@ class Checkpoint:
         self.path = self.job_dir / "state.json"
         if not self.path.exists():
             manager.init(self.path, job_id)
+        else:
+            state = manager.get(self.path)
+            if state.get("state") == manager.FAILED and manager.first_incomplete(state) is not None:
+                manager.resume_failed(self.path, "restored failed job snapshot before resume")
         bind(channel=channel, job=job_id)
 
     # ---------------------------------------------------------------- reading
