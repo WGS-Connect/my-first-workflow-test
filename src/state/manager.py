@@ -159,6 +159,34 @@ def check_transition(data: dict, target: str) -> None:
     raise InvalidTransition(f"Unhandled target {target}")  # pragma: no cover
 
 
+def resume_failed(path, reason: str = "") -> dict:
+    """Re-open a previously failed job for retry when a partial Drive restore remains incomplete."""
+    data = get(path)
+    if not data:
+        raise InvalidTransition(f"No state file at {path}")
+
+    current = data.get("state")
+    if current == FAILED_RETRYABLE:
+        return data
+    if current != FAILED:
+        raise InvalidTransition(f"Cannot resume failed job from state {current!r}; expected FAILED")
+    if first_incomplete(data) is None:
+        raise InvalidTransition("Cannot resume failed job: all stages are already complete")
+
+    previous = current
+    data["state"] = FAILED_RETRYABLE
+    data["retry_count"] = int(data.get("retry_count", 0)) + 1
+    data["updated_at"] = now()
+    data["generation"] = int(data.get("generation", 0)) + 1
+    if reason:
+        data["resume_reason"] = reason[:200]
+    history = data.setdefault("history", [])
+    history.append({"from": previous, "to": FAILED_RETRYABLE, "at": data["updated_at"]})
+    del history[:-HISTORY_LIMIT]
+    write_json(path, data)
+    return data
+
+
 def transition(path, target: str, **extra) -> dict:
     data = get(path)
     if not data:
