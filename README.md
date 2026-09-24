@@ -1,110 +1,93 @@
-# Audiobook YouTube Automation — Production Build
+# Autonomous YouTube Audiobook System — Production Repair
 
-This repository is now a **single-channel audiobook production system**. The old finance channel and the old audiobook 50-image visual-generation workflow have been removed.
+This revision fixes the critical recovery and publishing defects found in the previous ZIP.
 
-## Production workflow
+## Required Drive layout
 
-```text
-one topic folder → optional metadata → rights/content mode → research
-→ 60-minute structured script → Kokoro narration → fixed scene
-→ exact-duration video + low music → template thumbnail → existing YouTube uploader
-```
-
-### Default duration
-`AUDIOBOOK_TARGET_MINUTES=60` and `130 WPM` by default. Test mode is intentionally short and uploads privately.
-
-## Topic library
-
-Each topic is its own folder:
+The service account must have access to the Drive space used by the pipeline. The application creates/uses:
 
 ```text
-assets/audiobook/books/
-└── Rich Dad Poor Dad/
-    ├── Topic 001/
-    │   ├── cover.jpg          # any supported image type
-    │   ├── title.txt          # optional; exact YouTube title when present
-    │   ├── description.txt    # optional; exact description when present
-    │   ├── hashtags.txt       # optional; exact hashtags when present
-    │   ├── type.txt           # optional: book OR topic
-    │   └── category.txt       # optional thumbnail category
-    └── Topic 002/
-        └── ...
+AUDIOBOOK_AUTOMATION/
+├── INPUT_ASSETS/
+│   ├── covers/
+│   │   └── 001.png
+│   └── music/
+├── VIDEO_LIBRARY/
+│   ├── Person A/
+│   ├── Person B/
+│   └── ...
+├── WORK/
+├── SUCCESS/
+└── FAILED/
 ```
 
-If metadata is missing, AI generates only the missing part. A provided `title.txt` is never rewritten. The title is used to identify the underlying book when possible.
+Video clips should already contain their intended PIP overlays. PIP processing was removed from the production configuration.
 
-`type.txt=book` produces an original long-form summary/analysis of the named book. `type.txt=topic` produces an original educational script. If `type.txt` is missing, the model classifies the input.
+## GitHub input
 
-## Fixed video scene assets
-
-The current pipeline expects all scene assets under the audiobook asset root, not at the top-level `assets/` folder. This matches the runtime config in `src/config.py` and the GitHub Actions preflight checks.
+`input/topics.txt`:
 
 ```text
-assets/
-├── audiobook/
-│   ├── books/                  # topic folders and source material
-│   ├── persons/                # transparent person images
-│   ├── backgrounds/            # premade moving background videos
-│   ├── music/                  # background music
-│   ├── thumbnails/            # finished category templates
-│   ├── scene.yaml
-│   ├── thumbnail_layout.yaml
-│   └── voice_settings.txt
-├── thumbnails/                 # legacy/top-level folder; not used by current config
-└── ...
+001|Book topic here
+002|Another book topic
 ```
 
-Important:
-- `assets/audiobook/persons` is required by the runtime.
-- `assets/audiobook/backgrounds` is required by the runtime.
-- `assets/audiobook/books` is required and must contain a book/topic structure such as `assets/audiobook/books/<BOOK>/<TOPIC>/`.
-- Top-level `assets/persons`, `assets/backgrounds`, and `assets/music` are not the active runtime layout for this repository.
+Large covers, music and video are kept in Drive instead of GitHub.
 
-The bench is **not generated**. It remains part of the premade background scene. The person is composited above the bench, and the book is composited onto the bench at fixed coordinates. Only the background video moves.
+## Secrets
 
-## Thumbnail system
+- `GEMINI_API_KEY`
+- `YOUTUBE_CLIENT_ID`
+- `YOUTUBE_CLIENT_SECRET`
+- `YOUTUBE_REFRESH_TOKEN`
+- `GOOGLE_DRIVE_CREDENTIALS`
 
-You provide finished category backgrounds/templates. The engine does not redesign them. It selects a category template, places the current book cover and the same selected person in fixed areas, and generates a **3–8 word short, curiosity/pain-driven hook** that is not a copy of the title.
+### Important YouTube authorization change
 
-Common raster image formats are accepted for covers/templates: JPEG, PNG, WebP, BMP, TIFF and AVIF when Pillow supports it.
+The repair uses the broader `youtube` OAuth scope so it can verify whether a video was already published after a runner crash. An old refresh token created only with `youtube.upload` may need to be re-authorized.
 
-## One-time voice setup
+## Recovery model
 
-Run:
+Every expensive completed artifact is checkpointed to `WORK/{book_id}/` immediately after creation:
 
-```bash
-python scripts/voice_lab.py
-```
+- outline
+- introduction
+- every chapter
+- final script
+- every TTS WAV chunk
+- final audio
+- video source plan
+- background video
+- final video
+- thumbnail
+- metadata
+- state
 
-A local browser UI opens with the Kokoro catalog. You can audition voices, change speed, pitch and A/B blend. Click **Save Production Voice** when satisfied. The result is stored in `config/voice_settings.txt`, which production reads automatically.
+A fresh GitHub runner can therefore reconstruct its local working directory from Drive instead of regenerating completed work.
 
-`BLEND=0` uses Voice A. A blend such as `BLEND=35` mixes Voice A at 65% with Voice B at 35%. Pitch is in semitones.
+`FAILED` is **not terminal**. The scheduler retries failed books on later runs. Quota failures use `WAITING_FOR_QUOTA`.
 
-## Emotion-aware narration
+## TTS
 
-The script generator deliberately writes natural performance punctuation: commas for breathing, em dashes for emphasis, ellipses for reflective pauses, short sentences for impact, question marks for questioning delivery and paragraph breaks for larger pauses. It does not inject `[sad]`, `[pause]`, SSML or stage directions.
+TTS order is:
 
-## Fast/hybrid rendering
+1. Microsoft Edge Neural TTS
+2. Kokoro fallback
 
-Background clips are checked for compatible streams and concatenated by stream copy when possible. The first background cycle always includes every supplied clip; later coverage repeats the cycle. If formats differ, only background assembly is normalized. The final person/book composite necessarily encodes once, after which narration/music are attached with the fast mux path.
+Gemini TTS is not used.
 
-## YouTube uploader
+Voice speed and pitch remain controlled through `voice.json`.
 
-The existing `src/youtube/client.py` implementation is retained: marker-based duplicate detection, resumable upload, persisted video ID, thumbnail setting and verification remain in place.
+## Background music
 
-Credentials remain `YOUTUBE_TOKEN_JSON_BOOKS` and `YOUTUBE_VISIBILITY_BOOKS`.
+Music is actually mixed into the final video at `music_volume`, looped to the narration duration and placed underneath narration.
 
-## GitHub Actions
+## Scheduler
 
-Only audiobook workflows remain. Required secrets are `GEMINI_API_KEY` or `GROQ_API_KEY`, `TAVILY_API_KEY` (recommended), `AUDIOBOOK_DRIVE_CREDENTIALS`, `AUDIOBOOK_DRIVE_ROOT_FOLDER_ID`, and `YOUTUBE_TOKEN_JSON_BOOKS`.
+The application no longer requires GitHub Actions to start at exactly `04:00`. GitHub scheduled workflows can be delayed; any scheduled start is accepted.
 
-The workflow also validates the asset layout before production. If the asset directory structure is missing or incorrect, the job fails early with a clear preflight error instead of continuing into rendering.
+## Validation performed on this repair
 
-## Local validation
-
-```bash
-pip install -r requirements-torch.txt
-pip install -r requirements.txt
-python -m pytest -q -m "not e2e"
-python scripts/pipeline.py --channel audiobook --test
-```
+- Python syntax compilation for every source module
+- ZIP rebuilt from the repaired repository
+- Critical configuration/code paths inspected statically
